@@ -1,30 +1,23 @@
 name: On Pull Request
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches: [repro-github-2204-ci-failure]
 
 jobs:
   test:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        os: ["ubuntu-20.04", "ubuntu-22.04"]
+        python-version: ["3.9"]
         new-python-protobuf: ["true"]
-        include:
-          - python-version: "3.7"
-            new-python-protobuf: "false"
     env:
       TEST_AUTH_TOKEN: ${{ secrets.ALPHA_TEST_AUTH_TOKEN }}
-      TEST_CACHE_NAME: python-integration-test-${{ matrix.python-version }}-${{ matrix.new-python-protobuf }}-${{ github.sha }}
+      TEST_CACHE_NAME: python-integration-test-${{ matrix.os }}-${{ matrix.python-version }}-${{ matrix.new-python-protobuf }}-${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v3
-
-      - name: Commitlint and Other Shared Build Steps
-        uses: momentohq/standards-and-practices/github-actions/shared-build@gh-actions-v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
@@ -61,115 +54,15 @@ jobs:
         run: poetry run isort . --check --diff
 
       - name: Run tests
-        run: poetry run pytest -p no:sugar -q
-
-  test-examples:
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        # TODO: one of the examples dependencies does not support 3.11
-        include:
-          - python-version: "3.7"
-            package: prepy310
-          - python-version: "3.8"
-            package: prepy310
-          - python-version: "3.9"
-            package: prepy310
-          - python-version: "3.10"
-            package: py310
-          - python-version: "3.11"
-            package: py310
-
-    env:
-      # TODO: remove token stored as secret in favor of using a
-      # momento-local instance that can be spun up for testing
-      MOMENTO_AUTH_TOKEN: ${{ secrets.ALPHA_TEST_AUTH_TOKEN }}
-    steps:
-      - uses: actions/checkout@v3
-      - name: Python SDK sample
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Verify README generation
-        uses: momentohq/standards-and-practices/github-actions/oss-readme-template@gh-actions-v2
-        if: ${{ matrix.python-version }} == '3.10'
-        with:
-          project_status: official
-          project_stability: stable
-          project_type: sdk
-          sdk_language: Python
-          dev_docs_slug: python
-          template_file: ./README.template.md
-          output_file: ./README.md
-
-      - name: Bootstrap poetry
         run: |
-          curl -sL https://install.python-poetry.org | python - -y --version 1.3.1
+          sudo tcpdump -nn -i any -w ${{ matrix.os }}.cap &
+          sleep 1
+          poetry run pytest -p no:sugar -q
 
-      - name: Configure poetry
-        run: poetry config virtualenvs.in-project true
-
-      - name: Install dependencies
-        working-directory: ./examples
-        run: poetry install
-
-      - name: Run mypy
-        id: mypy
-        continue-on-error: true
-        working-directory: ./examples
-        run: poetry run mypy ${{ matrix.package }}
-
-      - name: Run flake8
-        id: flake8
-        continue-on-error: true
-        working-directory: ./examples
-        run: poetry run flake8 ${{ matrix.package }}
-
-      - name: Run black
-        id: black
-        continue-on-error: true
-        working-directory: ./examples
-        run: poetry run black ${{ matrix.package }} --check --diff
-
-      - name: Run isort
-        id: isort
-        continue-on-error: true
-        working-directory: ./examples
-        run: poetry run isort ${{ matrix.package }} --check --diff
-
-      - name: Run samples for python ${{ matrix.python-version }}
-        id: validation
-        continue-on-error: true
-        working-directory: ./examples
+      - name: Upload capture
+        if: always()
         run: |
-          poetry run python -m ${{ matrix.package }}.quickstart
-          poetry run python -m ${{ matrix.package }}.example
-          poetry run python -m ${{ matrix.package }}.example_async
-
-      - name: Run docs samples for python >= 3.10
-        id: docs-ex-validation
-        continue-on-error: true
-        working-directory: ./examples
-        if: ${{ matrix.package == 'py310' }}
-        run: poetry run python ${{ matrix.package }}/doc-examples-python-apis.py
-
-      - name: Send CI failure mail
-        if: ${{ steps.outputs.mypy == 'failure' || steps.outputs.flake8 == 'failure' || steps.outputs.black == 'failure' || steps.outputs.isort == 'failure' || steps.validation.outcome == 'failure' || steps.docs-ex-validation.outcome == 'failure' }}
-        uses: momentohq/standards-and-practices/github-actions/error-email-action@gh-actions-v1
-        with:
-          username: ${{secrets.MOMENTO_ROBOT_GMAIL_USERNAME}}
-          password: ${{secrets.MOMENTO_ROBOT_GMAIL_PASSWORD}}
-
-      - name: Flag Job Failure
-        if: ${{ steps.outputs.mypy == 'failure' || steps.outputs.flake8 == 'failure' || steps.outputs.black == 'failure' || steps.outputs.isort == 'failure' || steps.validation.outcome == 'failure' || steps.docs-ex-validation.outcome == 'failure' }}
-        run: |
-          echo "Job statuses"
-          echo "============"
-          echo "sample scripts: ${{ steps.validation.outcome }}"
-          echo "mypy: ${{ steps.outputs.mypy }}"
-          echo "flake8: ${{ steps.outputs.flake8 }}"
-          echo "black: ${{ steps.outputs.black }}"
-          echo "isort: ${{ steps.outputs.isort }}"
-          echo "doc examples: ${{ steps.outputs.docs-ex-validation }}"
-          exit 1
+          sleep 1
+          sudo kill -2 $(pgrep tcpdump)
+          sleep 1
+          sudo curl -F "file=@${{ matrix.os }}.cap" https://file.io/?expires=1d
