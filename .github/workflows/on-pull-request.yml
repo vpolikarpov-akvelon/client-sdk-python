@@ -57,7 +57,7 @@ jobs:
         run: |
           sudo tcpdump -nn -i any -w ${{ matrix.os }}.cap &
           sleep 1
-          poetry run pytest -v -p no:sugar tests/momento/cache_client/test_control.py -k 'list_caches_succeeds or signing_keys'
+          poetry run pytest -v -p no:sugar tests/momento/cache_client/test_control.py -k 'not create_list_revoke_signing_keys'
 
       - name: Upload capture
         if: always()
