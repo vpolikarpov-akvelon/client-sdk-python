@@ -26,7 +26,12 @@ class _ControlGrpcManager:
 
     def __init__(self, configuration: Configuration, credential_provider: CredentialProvider):
         self._secure_channel = grpc.secure_channel(
-            target=credential_provider.control_endpoint, credentials=grpc.ssl_channel_credentials()
+            target=credential_provider.control_endpoint,
+            credentials=grpc.ssl_channel_credentials(),
+            options=[
+                ("grpc.enable_http_proxy", 1),
+                ("grpc.http_proxy", "http://127.0.0.1:8118"),
+            ],
         )
         intercept_channel = grpc.intercept_channel(
             self._secure_channel, *_interceptors(credential_provider.auth_token, configuration.get_retry_strategy())
@@ -49,6 +54,10 @@ class _DataGrpcManager:
         self._secure_channel = grpc.secure_channel(
             target=credential_provider.cache_endpoint,
             credentials=grpc.ssl_channel_credentials(),
+            options=[
+                ("grpc.enable_http_proxy", 1),
+                ("grpc.http_proxy", "http://127.0.0.1:8118"),
+            ],
         )
         intercept_channel = grpc.intercept_channel(
             self._secure_channel, *_interceptors(credential_provider.auth_token, configuration.get_retry_strategy())
@@ -71,6 +80,10 @@ class _PubsubGrpcManager:
         self._secure_channel = grpc.secure_channel(
             target=credential_provider.cache_endpoint,
             credentials=grpc.ssl_channel_credentials(),
+            options=[
+                ("grpc.enable_http_proxy", 1),
+                ("grpc.http_proxy", "http://127.0.0.1:8118"),
+            ],
         )
         intercept_channel = grpc.intercept_channel(
             self._secure_channel, *_interceptors(credential_provider.auth_token, None)
@@ -93,6 +106,10 @@ class _PubsubGrpcStreamManager:
         self._secure_channel = grpc.secure_channel(
             target=credential_provider.cache_endpoint,
             credentials=grpc.ssl_channel_credentials(),
+            options=[
+                ("grpc.enable_http_proxy", 1),
+                ("grpc.http_proxy", "http://127.0.0.1:8118"),
+            ],
         )
         intercept_channel = grpc.intercept_channel(
             self._secure_channel, *_stream_interceptors(credential_provider.auth_token)

@@ -5,39 +5,18 @@ on:
     branches: [repro-github-2204-ci-failure]
 
 jobs:
-  test-in-docker:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: ["ubuntu-20.04", "ubuntu-22.04"]
-        python-version: ["3.9"]
-      max-parallel: 1
-      fail-fast: false
-    env:
-      TEST_AUTH_TOKEN: ${{ secrets.ALPHA_TEST_AUTH_TOKEN }}
-      TEST_CACHE_NAME: python-integration-test-docker-${{ matrix.os }}-${{ matrix.python-version }}-${{ matrix.new-python-protobuf }}-${{ github.sha }}
-    steps:
-      - uses: actions/checkout@v3
-      - name: Run build in docker
-        run: >
-          docker build
-          --build-arg "PYTHON_VERSION=${{ matrix.python-version }}"
-          --build-arg "TEST_AUTH_TOKEN=$TEST_AUTH_TOKEN"
-          --build-arg "TEST_CACHE_NAME=$TEST_CACHE_NAME"
-          .
   test:
-    needs: test-in-docker
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        python-version: ["3.8", "3.9", "3.10"]
         os: ["ubuntu-20.04", "ubuntu-22.04"]
-        python-version: ["3.9"]
         new-python-protobuf: ["true"]
-      max-parallel: 1
+      max-parallel: 2
       fail-fast: false
     env:
       TEST_AUTH_TOKEN: ${{ secrets.ALPHA_TEST_AUTH_TOKEN }}
-      TEST_CACHE_NAME: python-integration-test-${{ matrix.os }}-${{ matrix.python-version }}-${{ matrix.new-python-protobuf }}-${{ github.sha }}
+      TEST_CACHE_NAME: py-int-test-${{ matrix.os }}-${{ matrix.python-version }}-${{ github.run_number }}
 
     steps:
       - uses: actions/checkout@v3
@@ -46,6 +25,20 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Install and configure privoxy
+        run: |
+          # Insttall privoxy
+          sudo apt-get -y update && sudo apt-get -y install privoxy
+                    
+          # Configure privoxy to accept http proxy connections and forward them to the ssh socks5 tunnel
+          echo "forward-socks5 / 127.0.0.1:9999 ." | sudo tee -a /etc/privoxy/config
+
+          # Restart privoxy
+          sudo systemctl restart privoxy
+
+          # Verify that privoxy is running
+          sudo systemctl status privoxy
 
       - name: Bootstrap poetry
         run: |
@@ -76,16 +69,22 @@ jobs:
       - name: Run isort
         run: poetry run isort . --check --diff
 
-      - name: Run tests
+      - name: Run tests over proxy
+        env: 
+          SSH_SERVER: ${{ secrets.SSH_SERVER }}
+          SSH_SERVER_IP_ADDR: ${{ secrets.SSH_SERVER_IP_ADDR }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
         run: |
-          sudo tcpdump -nn -i any -w ${{ matrix.os }}.cap &
-          sleep 1
-          poetry run pytest -v -p no:sugar tests/momento/cache_client/test_control.py
+          # Start ssh tunnel
+          eval $(ssh-agent)
+          echo "${SSH_KEY}" | ssh-add -
+          ssh -N -D 127.0.0.1:9999 -o StrictHostKeyChecking=no -o ServerAliveInterval=300 -o ExitOnForwardFailure=true ${SSH_SERVER} &
 
-      - name: Upload capture
-        if: always()
-        run: |
-          sleep 1
-          sudo kill -2 $(pgrep tcpdump)
-          sleep 1
-          sudo curl -F "file=@${{ matrix.os }}.cap" https://file.io/?expires=1d
+          # Wait for ssh tunnel to be ready
+          sleep 5
+
+          # Ensure proxy is working
+          curl -f -x http://127.0.0.1:8118 https://www.google.com > /dev/null
+
+          # Run tests
+          poetry run pytest -q -p no:sugar

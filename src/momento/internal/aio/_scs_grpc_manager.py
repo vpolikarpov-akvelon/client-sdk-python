@@ -30,6 +30,10 @@ class _ControlGrpcManager:
             target=credential_provider.control_endpoint,
             credentials=grpc.ssl_channel_credentials(),
             interceptors=_interceptors(credential_provider.auth_token, configuration.get_retry_strategy()),
+            options=[
+                ("grpc.enable_http_proxy", 1),
+                ("grpc.http_proxy", "http://127.0.0.1:8118"),
+            ],
         )
 
     async def close(self) -> None:
@@ -59,6 +63,8 @@ class _DataGrpcManager:
             # https://grpc.github.io/grpc/python/glossary.html#term-channel_arguments
             # https://github.com/grpc/grpc/blob/v1.46.x/include/grpc/impl/codegen/grpc_types.h#L140
             options=[
+                ("grpc.enable_http_proxy", 1),
+                ("grpc.http_proxy", "http://127.0.0.1:8118"),
                 # ('grpc.max_concurrent_streams', 1000),
                 # ('grpc.use_local_subchannel_pool', 1),
                 # (experimental.ChannelOptions.SingleThreadedUnaryStream, 1)
@@ -82,6 +88,10 @@ class _PubsubGrpcManager:
             target=credential_provider.cache_endpoint,
             credentials=grpc.ssl_channel_credentials(),
             interceptors=_interceptors(credential_provider.auth_token, None),
+            options=[
+                ("grpc.enable_http_proxy", 1),
+                ("grpc.http_proxy", "http://127.0.0.1:8118"),
+            ],
         )
 
     async def close(self) -> None:
@@ -101,6 +111,10 @@ class _PubsubGrpcStreamManager:
             target=credential_provider.cache_endpoint,
             credentials=grpc.ssl_channel_credentials(),
             interceptors=_stream_interceptors(credential_provider.auth_token),
+            options=[
+                ("grpc.enable_http_proxy", 1),
+                ("grpc.http_proxy", "http://127.0.0.1:8118"),
+            ],
         )
 
     async def close(self) -> None:
