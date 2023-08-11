@@ -11,6 +11,7 @@ jobs:
       matrix:
         os: ["ubuntu-20.04", "ubuntu-22.04"]
         python-version: ["3.9"]
+      max-parallel: 1
       fail-fast: false
     env:
       TEST_AUTH_TOKEN: ${{ secrets.ALPHA_TEST_AUTH_TOKEN }}
@@ -25,12 +26,14 @@ jobs:
           --build-arg "TEST_CACHE_NAME=$TEST_CACHE_NAME"
           .
   test:
+    needs: test-in-docker
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: ["ubuntu-20.04", "ubuntu-22.04"]
         python-version: ["3.9"]
         new-python-protobuf: ["true"]
+      max-parallel: 1
       fail-fast: false
     env:
       TEST_AUTH_TOKEN: ${{ secrets.ALPHA_TEST_AUTH_TOKEN }}
