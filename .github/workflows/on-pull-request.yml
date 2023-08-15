@@ -2,19 +2,20 @@ name: On Pull Request
 
 on:
   push:
-    branches: [repro-github-2204-ci-failure]
+    branches: [repro-github-2204-ci-failure-gcp]
 
 jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        python-version: ["3.8", "3.9", "3.10"]
         os: ["ubuntu-20.04", "ubuntu-22.04"]
-        python-version: ["3.9"]
         new-python-protobuf: ["true"]
+      fail-fast: false
     env:
-      TEST_AUTH_TOKEN: ${{ secrets.ALPHA_TEST_AUTH_TOKEN }}
-      TEST_CACHE_NAME: python-integration-test-${{ matrix.os }}-${{ matrix.python-version }}-${{ matrix.new-python-protobuf }}-${{ github.sha }}
+      TEST_AUTH_TOKEN: ${{ secrets.ALPHA_TEST_AUTH_TOKEN_GCP }}
+      TEST_CACHE_NAME: py-int-test-${{ matrix.os }}-${{ matrix.python-version }}-${{ github.run_number }}
 
     steps:
       - uses: actions/checkout@v3
@@ -55,9 +56,9 @@ jobs:
 
       - name: Run tests
         run: |
-          sudo tcpdump -nn -i any -w ${{ matrix.os }}.cap &
+          sudo tcpdump -nn -i any -w ${{ matrix.os }}-${{ matrix.python-version }}-${{ github.run_number }}.cap &
           sleep 1
-          poetry run pytest -v -p no:sugar tests/momento/cache_client/test_control.py -k 'not create_list_revoke_signing_keys'
+          poetry run pytest -v -p no:sugar tests/momento/cache_client/test_control.py
 
       - name: Upload capture
         if: always()
@@ -65,4 +66,4 @@ jobs:
           sleep 1
           sudo kill -2 $(pgrep tcpdump)
           sleep 1
-          sudo curl -F "file=@${{ matrix.os }}.cap" https://file.io/?expires=1d
+          sudo curl -F "file=@${{ matrix.os }}-${{ matrix.python-version }}-${{ github.run_number }}.cap" https://file.io/?expires=1d
